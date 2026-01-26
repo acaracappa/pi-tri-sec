@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly Security Report Aggregator
+After=lynis-scan.service rkhunter-scan.service aide-scan.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/security-weekly-report.sh
+StandardOutput=journal
+StandardError=journal
