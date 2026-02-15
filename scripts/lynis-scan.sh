@@ -104,21 +104,35 @@ else
     CRITICAL_COUNT="0"
 fi
 
-# Calculate delta if previous scan exists
+# Calculate delta using previous summary (consistent data source)
 DELTA_INFO=""
-if [ -f "${PREVIOUS_SCAN}" ]; then
-    PREV_WARNINGS=$(safe_number "$(grep -c 'warning' "${PREVIOUS_SCAN}" 2>/dev/null)")
+PREV_SUMMARY="${LOG_DIR}/previous-summary.txt"
+if [ -f "${PREV_SUMMARY}" ]; then
+    PREV_WARNINGS=$(safe_number "$(grep '^WARNINGS:' "${PREV_SUMMARY}" 2>/dev/null | cut -d: -f2)")
+    PREV_HARDENING=$(safe_number "$(grep '^HARDENING_INDEX:' "${PREV_SUMMARY}" 2>/dev/null | cut -d: -f2)")
     DIFF_WARNINGS=$((WARNINGS - PREV_WARNINGS))
-    
+    DIFF_HARDENING=$((HARDENING_INDEX - PREV_HARDENING))
+
+    DELTA_PARTS=""
     if [ ${DIFF_WARNINGS} -gt 0 ]; then
-        DELTA_INFO="New warnings since last scan: +${DIFF_WARNINGS}"
+        DELTA_PARTS="New warnings: +${DIFF_WARNINGS}"
     elif [ ${DIFF_WARNINGS} -lt 0 ]; then
-        DELTA_INFO="Warnings resolved since last scan: ${DIFF_WARNINGS}"
+        DELTA_PARTS="Warnings resolved: ${DIFF_WARNINGS}"
     else
-        DELTA_INFO="No change in warnings since last scan"
+        DELTA_PARTS="Warnings unchanged"
     fi
+
+    if [ ${DIFF_HARDENING} -ne 0 ]; then
+        DELTA_PARTS="${DELTA_PARTS}; Hardening index change: ${DIFF_HARDENING}"
+    fi
+    DELTA_INFO="${DELTA_PARTS}"
 else
     DELTA_INFO="No previous scan for comparison (first run)"
+fi
+
+# Preserve previous summary for delta comparison
+if [ -f "${SUMMARY_FILE}" ]; then
+    cp "${SUMMARY_FILE}" "${PREV_SUMMARY}"
 fi
 
 # Generate summary report

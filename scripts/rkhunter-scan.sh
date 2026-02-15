@@ -96,11 +96,14 @@ else
     CRITICAL_COUNT="0"
 fi
 
-# Calculate delta if previous scan exists
+# Calculate delta using previous summary (consistent data source)
 DELTA_INFO=""
-if [ -f "${PREVIOUS_SCAN}" ]; then
-    PREV_WARNINGS=$(safe_number "$(grep -c 'Warning:' "${PREVIOUS_SCAN}" 2>/dev/null)")
+PREV_SUMMARY="${LOG_DIR}/previous-summary.txt"
+if [ -f "${PREV_SUMMARY}" ]; then
+    PREV_WARNINGS=$(safe_number "$(grep '^WARNINGS:' "${PREV_SUMMARY}" 2>/dev/null | cut -d: -f2)")
+    PREV_ROOTKITS=$(safe_number "$(grep '^ROOTKITS_FOUND:' "${PREV_SUMMARY}" 2>/dev/null | cut -d: -f2)")
     DIFF_WARNINGS=$((WARNINGS - PREV_WARNINGS))
+
     if [ ${DIFF_WARNINGS} -gt 0 ]; then
         DELTA_INFO="New warnings since last scan: +${DIFF_WARNINGS}"
     elif [ ${DIFF_WARNINGS} -lt 0 ]; then
@@ -110,6 +113,11 @@ if [ -f "${PREVIOUS_SCAN}" ]; then
     fi
 else
     DELTA_INFO="No previous scan for comparison (first run)"
+fi
+
+# Preserve previous summary for delta comparison
+if [ -f "${SUMMARY_FILE}" ]; then
+    cp "${SUMMARY_FILE}" "${PREV_SUMMARY}"
 fi
 
 # Generate summary report

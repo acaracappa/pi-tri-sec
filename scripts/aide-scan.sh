@@ -135,18 +135,23 @@ elif [ ${TOTAL_CHANGES} -gt 0 ]; then
     WARNINGS="${TOTAL_CHANGES}"
 fi
 
-# Exit code handling - AIDE returns 0 only if no changes
-if [ ${SCAN_EXIT_CODE} -eq 0 ]; then
+# AIDE exit codes: 0=no changes, non-zero is bitmask (1=added, 2=removed, 4=changed, etc.)
+# Trust parsed metrics over exit code; only use exit code as fallback if parsing found nothing
+if [ ${SCAN_EXIT_CODE} -eq 0 ] && [ ${TOTAL_CHANGES} -eq 0 ]; then
     STATUS="OK"
     WARNINGS="0"
 fi
 
-# Calculate delta if previous scan exists
+# Calculate delta using previous summary (consistent data source)
 DELTA_INFO=""
-if [ -f "${PREVIOUS_SCAN}" ]; then
-    PREV_CHANGES=$(safe_number "$(grep -cE '^(added|removed|changed):' "${PREVIOUS_SCAN}" 2>/dev/null)")
-    DIFF_CHANGES=$((TOTAL_CHANGES - PREV_CHANGES))
-    
+PREV_SUMMARY="${LOG_DIR}/previous-summary.txt"
+if [ -f "${PREV_SUMMARY}" ]; then
+    PREV_ADDED=$(safe_number "$(grep '^FILES_ADDED:' "${PREV_SUMMARY}" 2>/dev/null | cut -d: -f2)")
+    PREV_REMOVED=$(safe_number "$(grep '^FILES_REMOVED:' "${PREV_SUMMARY}" 2>/dev/null | cut -d: -f2)")
+    PREV_CHANGED=$(safe_number "$(grep '^FILES_CHANGED:' "${PREV_SUMMARY}" 2>/dev/null | cut -d: -f2)")
+    PREV_TOTAL=$((PREV_ADDED + PREV_REMOVED + PREV_CHANGED))
+    DIFF_CHANGES=$((TOTAL_CHANGES - PREV_TOTAL))
+
     if [ ${DIFF_CHANGES} -gt 0 ]; then
         DELTA_INFO="More changes detected: +${DIFF_CHANGES} vs previous scan"
     elif [ ${DIFF_CHANGES} -lt 0 ]; then
@@ -156,6 +161,11 @@ if [ -f "${PREVIOUS_SCAN}" ]; then
     fi
 else
     DELTA_INFO="No previous scan for comparison (first run)"
+fi
+
+# Preserve previous summary for delta comparison
+if [ -f "${SUMMARY_FILE}" ]; then
+    cp "${SUMMARY_FILE}" "${PREV_SUMMARY}"
 fi
 
 # Generate summary report

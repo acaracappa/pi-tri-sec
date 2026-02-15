@@ -1,5 +1,6 @@
 [Unit]
 Description=Weekly Security Report Aggregator
+Wants=lynis-scan.service rkhunter-scan.service aide-scan.service
 After=lynis-scan.service rkhunter-scan.service aide-scan.service
 
 [Service]
