@@ -77,7 +77,7 @@ fi
 
 # Run AIDE check
 log_message "Running aide --check"
-aide --check > "${TEMP_OUTPUT}" 2>&1
+aide --config=/etc/aide/aide.conf --check > "${TEMP_OUTPUT}" 2>&1
 SCAN_EXIT_CODE=$?
 
 # Copy full output to last-scan.log
@@ -89,19 +89,19 @@ STATUS="OK"
 ATTENTION_ITEMS=""
 
 # Parse AIDE output
-ITEMS_CHECKED=$(safe_number "$(grep -E '^Total number of entries:' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
+ITEMS_CHECKED=$(safe_number "$(grep -E '^[[:space:]]*(Total number|Number) of entries:[[:space:]]+[0-9]+' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
 if [ "${ITEMS_CHECKED}" = "0" ]; then
     ITEMS_CHECKED=$(safe_number "$(grep -c '^/' "${TEMP_OUTPUT}" 2>/dev/null)")
 fi
 
 # Count added files
-FILES_ADDED=$(safe_number "$(grep -E '^Added entries:' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
+FILES_ADDED=$(safe_number "$(grep -E '^[[:space:]]+Added entries:[[:space:]]+[0-9]+' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
 
 # Count removed files
-FILES_REMOVED=$(safe_number "$(grep -E '^Removed entries:' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
+FILES_REMOVED=$(safe_number "$(grep -E '^[[:space:]]+Removed entries:[[:space:]]+[0-9]+' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
 
 # Count changed files
-FILES_CHANGED=$(safe_number "$(grep -E '^Changed entries:' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
+FILES_CHANGED=$(safe_number "$(grep -E '^[[:space:]]+Changed entries:[[:space:]]+[0-9]+' "${TEMP_OUTPUT}" 2>/dev/null | awk '{print $NF}')")
 
 # Calculate total changes
 TOTAL_CHANGES=$((FILES_ADDED + FILES_REMOVED + FILES_CHANGED))
@@ -110,7 +110,7 @@ TOTAL_CHANGES=$((FILES_ADDED + FILES_REMOVED + FILES_CHANGED))
 if [ ${TOTAL_CHANGES} -gt 0 ]; then
     ATTENTION_ITEMS=$(grep -E "^(added|removed|changed):" "${TEMP_OUTPUT}" 2>/dev/null | head -20 || echo "")
     if [ -z "${ATTENTION_ITEMS}" ]; then
-        ATTENTION_ITEMS=$(grep -E "^[+-f]" "${TEMP_OUTPUT}" 2>/dev/null | head -20 || echo "")
+        ATTENTION_ITEMS=$(grep -E "^[fdlpbcs+-][^:]*: /" "${TEMP_OUTPUT}" 2>/dev/null | head -20 || echo "")
     fi
 fi
 
@@ -140,6 +140,17 @@ fi
 if [ ${SCAN_EXIT_CODE} -eq 0 ] && [ ${TOTAL_CHANGES} -eq 0 ]; then
     STATUS="OK"
     WARNINGS="0"
+elif [ ${SCAN_EXIT_CODE} -gt 0 ] && [ ${SCAN_EXIT_CODE} -lt 14 ] && [ ${TOTAL_CHANGES} -eq 0 ]; then
+    STATUS="WARNING"
+    WARNINGS="1"
+    ATTENTION_ITEMS="AIDE reported differences (exit ${SCAN_EXIT_CODE}) but the summary could not be parsed"
+fi
+
+# AIDE exit codes 14+ are errors (config, I/O, version); a check that ran nothing is never OK
+if [ ${SCAN_EXIT_CODE} -ge 14 ] || [ "${ITEMS_CHECKED}" = "0" ]; then
+    STATUS="WARNING"
+    WARNINGS="1"
+    ATTENTION_ITEMS="AIDE check did not run (exit ${SCAN_EXIT_CODE}): $(grep -m1 -i 'error' "${TEMP_OUTPUT}" 2>/dev/null)"
 fi
 
 # Calculate delta using previous summary (consistent data source)
@@ -200,7 +211,7 @@ rm -f "${TEMP_OUTPUT}"
 # Exit with appropriate code
 case "${STATUS}" in
     "OK") exit 0 ;;
-    "WARNING") exit 1 ;;
+    "WARNING") exit 0 ;;
     "CRITICAL") exit 2 ;;
     *) exit 0 ;;
 esac

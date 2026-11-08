@@ -169,7 +169,7 @@ rm -f "${TEMP_OUTPUT}"
 # Exit with appropriate code
 case "${STATUS}" in
     "OK") exit 0 ;;
-    "WARNING") exit 1 ;;
+    "WARNING") exit 0 ;;
     "CRITICAL") exit 2 ;;
     *) exit 0 ;;
 esac

@@ -18,7 +18,7 @@ Weekly Report Aggregator (/var/log/security/weekly-report.txt)
         |                    |                    |
    +---------+         +-----------+         +--------+
    |  Lynis  |         |  rkhunter |         |  AIDE  |
-   | Sun 2AM |         |  Sun 2:30 |         | Sun 3AM|
+   | Sun 2AM |         | Daily 2:30|         | Sun 3AM|
    +---------+         +-----------+         +--------+
 ```
 
@@ -44,40 +44,53 @@ Weekly Report Aggregator (/var/log/security/weekly-report.txt)
 | Timer | Time | Tool |
 |-------|------|------|
 | lynis-scan.timer | Sun 02:00 | Security audit |
-| rkhunter-scan.timer | Sun 02:30 | Rootkit scan |
+| rkhunter-scan.timer | Daily 02:30 | Rootkit scan |
 | aide-scan.timer | Sun 03:00 | Integrity check |
 | security-report.timer | Sun 04:00 | Weekly report |
 
-## Implementation Status
+## Install
 
-**Completed: 2026-01-26**
+On a fresh Raspberry Pi OS (Debian 13 trixie) host, as root:
 
-### Setup Tasks
-- [x] Directory structure `/var/log/security/{lynis,rkhunter,aide}`
-- [x] Packages installed (lynis, rkhunter, aide)
-- [x] Custom scan scripts created in `/usr/local/bin/`
-- [x] All systemd timers created and enabled
-- [x] AIDE database initialized (44MB baseline)
-- [x] rkhunter database updated and baseline set
-- [x] Weekly report aggregator created
-- [x] Initial baseline scans completed
-- [x] Weekly report generated successfully
+```bash
+git clone https://github.com/acaracappa/pi-tri-sec.git && cd pi-tri-sec
+sudo ./setup.sh
+```
 
-### Hardening Applied
-- [x] SSH `PermitRootLogin` set to `no`
+`setup.sh` installs the packages, disables the distro timers that clash with these, configures rkhunter (mirror updates,
+known false positives), turns off root SSH login, initialises AIDE (sha512, with excludes for paths that change on every boot),
+copies the scripts to `/usr/local/bin/`, and enables the timers. Re-run `sudo aideinit -y -f` after any intentional system change.
 
-### Final Scan Results (2026-01-26)
+## Prometheus exporter (optional)
 
-| Tool | Status | Details |
-|------|--------|---------|
-| Lynis | WARNING | Hardening score: 72/100, 1 warning, 42 suggestions |
-| rkhunter | WARNING | 1256 rootkits checked, 0 found, 2 benign warnings |
-| AIDE | OK | Baseline established, no changes |
+`exporter/pitrisec_exporter.py` reads each tool's `summary.txt` and writes `pitrisec_status{tool}` (0 OK, 1 WARNING, 2 CRITICAL;
+a missing STATUS counts as 2) for node_exporter's textfile collector (`/var/lib/prometheus/node-exporter/`), every 15 minutes:
 
-### Remaining Warnings (Benign)
-- **Lynis**: Missing security repository in apt sources (optional)
-- **rkhunter**: Suspicious file types in `/dev` (normal on Linux)
-- **rkhunter**: Hidden file `/etc/.updated` (system timestamp)
+```bash
+sudo cp exporter/pitrisec_exporter.py /usr/local/bin/
+sudo cp exporter/pitrisec-exporter.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now pitrisec-exporter.timer
+```
+
+## Summary format
+
+Each scan writes `/var/log/security/<tool>/summary.txt`:
+
+```
+TOOL: <tool_name>
+SCAN_DATE: <ISO timestamp>
+STATUS: OK | WARNING | CRITICAL
+ITEMS_CHECKED: <count>
+WARNINGS: <count>
+CRITICAL: <count>
+HARDENING_INDEX: <0-100>          (lynis only)
+
+--- ATTENTION REQUIRED ---
+<only actionable items, one per line>
+
+--- CHANGES SINCE LAST SCAN ---
+<delta from previous scan, if applicable>
+```
 
 ## Manual Commands
 
@@ -104,8 +117,7 @@ cat /var/log/security/weekly-report.txt
 ### Update AIDE baseline after legitimate changes
 After system updates or intentional config changes, update the AIDE baseline:
 ```bash
-sudo aideinit
-sudo cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+sudo aideinit -y -f
 ```
 
 ### Update rkhunter baseline after system changes
@@ -135,43 +147,6 @@ cat /var/log/security/alerts.txt
 ### Databases
 - `/var/lib/aide/aide.db` - AIDE file integrity baseline
 - `/var/lib/rkhunter/db/` - rkhunter detection signatures
-
-## Project Files
-
-```
-pi-tri-sec/
-├── PLAN.md                 # Detailed implementation plan
-├── README.md               # This file
-├── scripts/
-│   ├── aide-scan.sh        # AIDE integrity check script
-│   ├── lynis-scan.sh       # Lynis security audit script
-│   ├── rkhunter-scan.sh    # rkhunter rootkit scan script
-│   └── security-weekly-report.sh  # Weekly report aggregator
-└── systemd/
-    ├── aide-scan.service
-    ├── aide-scan.timer
-    ├── lynis-scan.service
-    ├── lynis-scan.timer
-    ├── rkhunter-scan.service
-    ├── rkhunter-scan.timer
-    ├── security-report.service
-    └── security-report.timer
-```
-
-### Reinstallation
-To reinstall from these backups:
-```bash
-# Copy scripts
-sudo cp scripts/*.sh /usr/local/bin/
-sudo chmod +x /usr/local/bin/*-scan.sh /usr/local/bin/security-weekly-report.sh
-
-# Copy systemd units
-sudo cp systemd/* /etc/systemd/system/
-sudo systemctl daemon-reload
-
-# Enable timers
-sudo systemctl enable --now lynis-scan.timer rkhunter-scan.timer aide-scan.timer security-report.timer
-```
 
 ## Alert Behavior
 

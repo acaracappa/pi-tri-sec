@@ -70,10 +70,8 @@ sed -i 's|^MIRRORS_MODE=1|MIRRORS_MODE=0|' /etc/rkhunter.conf
 grep -q '^ALLOWHIDDENFILE=/etc/.updated' /etc/rkhunter.conf || \
     sed -i '/^#ALLOWHIDDENFILE=\/etc\/.etckeeper/a ALLOWHIDDENFILE=/etc/.updated' /etc/rkhunter.conf
 
-# Accept key-only root login (matches default sshd behavior)
-sed -i 's|^#ALLOW_SSH_ROOT_USER=no|ALLOW_SSH_ROOT_USER=without-password|' /etc/rkhunter.conf
-# If already uncommented with a different value, update it
-sed -i 's|^ALLOW_SSH_ROOT_USER=no|ALLOW_SSH_ROOT_USER=without-password|' /etc/rkhunter.conf
+# Root SSH login is disabled (Step 4); rkhunter should expect that
+sed -i -E 's|^#?ALLOW_SSH_ROOT_USER=.*|ALLOW_SSH_ROOT_USER=no|' /etc/rkhunter.conf
 
 # Update rkhunter database
 log "Updating rkhunter signatures..."
@@ -81,13 +79,45 @@ rkhunter --update 2>/dev/null || warn "rkhunter --update returned non-zero (may 
 rkhunter --propupd > /dev/null 2>&1
 log "rkhunter configured"
 
-# --- Step 4: Ensure explicit PermitRootLogin in sshd ---
-if ! grep -rq '^PermitRootLogin' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ 2>/dev/null; then
-    log "Adding explicit PermitRootLogin to sshd config..."
-    echo "PermitRootLogin without-password" > /etc/ssh/sshd_config.d/hardening.conf
+# --- Step 4: Disable root SSH login ---
+# Set in both places: sshd takes the first value it reads, and rkhunter only reads the main file
+log "Disabling root SSH login..."
+echo "PermitRootLogin no" > /etc/ssh/sshd_config.d/hardening.conf
+if grep -qE '^PermitRootLogin' /etc/ssh/sshd_config; then
+    sed -i -E 's/^PermitRootLogin .*/PermitRootLogin no/' /etc/ssh/sshd_config
+else
+    echo "PermitRootLogin no" >> /etc/ssh/sshd_config
 fi
+sshd -t && systemctl reload ssh
 
 # --- Step 5: Initialize AIDE database ---
+sed -i -E 's/^Checksums = .*/Checksums = sha512/' /etc/aide/aide.conf
+cat > /etc/aide/aide.conf.d/99_zz_local_excludes << 'EOF'
+!/tmp(/|$)
+!/run/log/journal(/|$)
+!/var/lib/docker(/|$)
+!/var/lib/containerd(/|$)
+!/var/lib/prometheus/node-exporter(/|$)
+!/var/log/security(/|$)
+!/var/lib/wall(/|$)
+!/run/user(/|$)
+!/run/docker(/|$)
+!/home/[^/]+/\.cache/kiosk-chromium(/|$)
+!/home/[^/]+/\.config/kiosk-chromium(/|$)
+!/var/log/lynis\.log$
+!/var/log/lynis-report\.dat$
+!/var/log/apt/eipp\.log\.xz$
+!/var/log/aide/aideinit\.(log|errors)$
+!/run/systemd/inhibit(/|$)
+!/home/[^/]+/\.xsession-errors(\.old)?$
+!/run(/|$)
+!/var/lib/cloud(/|$)
+!/var/log/cloud-init[^/]*$
+!/var/swap$
+!/var/cache/apt(/|$)
+!/var/lib/apt/lists(/|$)
+!/dev(/|$)
+EOF
 if [ ! -f /var/lib/aide/aide.db ]; then
     log "Initializing AIDE database (this takes a few minutes)..."
     aideinit

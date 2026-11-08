@@ -1,8 +1,8 @@
 [Unit]
-Description=Weekly rkhunter Rootkit Scan
+Description=Daily rkhunter Rootkit Scan
 
 [Timer]
-OnCalendar=Sun *-*-* 02:30:00
+OnCalendar=*-*-* 02:30:00
 Persistent=true
 
 [Install]

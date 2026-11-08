@@ -1,0 +1,5 @@
+[Unit]
+Description=Export pi-tri-sec results for Prometheus
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/pitrisec_exporter.py
