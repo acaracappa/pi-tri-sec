@@ -95,6 +95,7 @@ sed -i -E 's/^Checksums = .*/Checksums = sha512/' /etc/aide/aide.conf
 cat > /etc/aide/aide.conf.d/99_zz_local_excludes << 'EOF'
 !/tmp(/|$)
 !/run/log/journal(/|$)
+!/var/log/journal(/|$)
 !/var/lib/docker(/|$)
 !/var/lib/containerd(/|$)
 !/var/lib/prometheus/node-exporter(/|$)
