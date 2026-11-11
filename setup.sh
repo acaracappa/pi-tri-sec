@@ -118,6 +118,12 @@ cat > /etc/aide/aide.conf.d/99_zz_local_excludes << 'EOF'
 !/var/cache/apt(/|$)
 !/var/lib/apt/lists(/|$)
 !/dev(/|$)
+!/root/\.cache/borg(/|$)
+!/root/\.config/borg/security(/|$)
+!/root/\.local/state/borgmatic(/|$)
+!/srv/borg/repos(/|$)
+!/srv/borg/\.cache(/|$)
+!/srv/borg/\.config/borg/security(/|$)
 EOF
 if [ ! -f /var/lib/aide/aide.db ]; then
     log "Initializing AIDE database (this takes a few minutes)..."
