@@ -1,0 +1,8 @@
+[Unit]
+Description=Verify package changes and refresh the AIDE baseline if all are explained
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aide-refresh.sh
+Nice=10
+IOSchedulingClass=idle

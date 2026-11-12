@@ -27,7 +27,8 @@ fi
 
 # Verify repo structure
 for f in "${SCRIPTS_DIR}/lynis-scan.sh" "${SCRIPTS_DIR}/rkhunter-scan.sh" \
-         "${SCRIPTS_DIR}/aide-scan.sh" "${SCRIPTS_DIR}/security-weekly-report.sh"; do
+         "${SCRIPTS_DIR}/aide-scan.sh" "${SCRIPTS_DIR}/security-weekly-report.sh" \
+         "${SCRIPTS_DIR}/aide-refresh.sh" "${REPO_DIR}/apt/99pitrisec-aide-refresh"; do
     if [ ! -f "$f" ]; then
         err "Missing script: $f"
         exit 1
@@ -37,7 +38,8 @@ done
 for f in "${SYSTEMD_DIR}/lynis-scan.service" "${SYSTEMD_DIR}/lynis-scan.timer" \
          "${SYSTEMD_DIR}/rkhunter-scan.service" "${SYSTEMD_DIR}/rkhunter-scan.timer" \
          "${SYSTEMD_DIR}/aide-scan.service" "${SYSTEMD_DIR}/aide-scan.timer" \
-         "${SYSTEMD_DIR}/security-report.service" "${SYSTEMD_DIR}/security-report.timer"; do
+         "${SYSTEMD_DIR}/security-report.service" "${SYSTEMD_DIR}/security-report.timer" \
+         "${SYSTEMD_DIR}/aide-refresh.service" "${SYSTEMD_DIR}/aide-refresh.path"; do
     if [ ! -f "$f" ]; then
         err "Missing systemd unit: $f"
         exit 1
@@ -124,6 +126,15 @@ cat > /etc/aide/aide.conf.d/99_zz_local_excludes << 'EOF'
 !/srv/borg/repos(/|$)
 !/srv/borg/\.cache(/|$)
 !/srv/borg/\.config/borg/security(/|$)
+!/var/lib/pitrisec(/|$)
+# Rewritten with the same content at every boot (cloud-init, NetworkManager): compare content, not times or inode
+/etc/hosts$ f VarInode
+/etc/netplan/[^/]+\.yaml$ f VarInode
+/etc/netplan$ d RecreatedDir
+/etc/NetworkManager/system-connections$ d RecreatedDir
+!/var/lib/NetworkManager/(internal-.*\.lease|seen-bssids|timestamps|NetworkManager\.state)$
+!/var/lib/alsa(/|$)
+!/var/lib/systemd/rfkill(/|$)
 EOF
 if [ ! -f /var/lib/aide/aide.db ]; then
     log "Initializing AIDE database (this takes a few minutes)..."
@@ -139,7 +150,11 @@ cp "${SCRIPTS_DIR}/lynis-scan.sh" /usr/local/bin/
 cp "${SCRIPTS_DIR}/rkhunter-scan.sh" /usr/local/bin/
 cp "${SCRIPTS_DIR}/aide-scan.sh" /usr/local/bin/
 cp "${SCRIPTS_DIR}/security-weekly-report.sh" /usr/local/bin/
-chmod +x /usr/local/bin/lynis-scan.sh \
+cp "${SCRIPTS_DIR}/aide-refresh.sh" /usr/local/bin/
+# apt hook: after any dpkg run, aide-refresh.path re-baselines AIDE if debsums explains every change
+cp "${REPO_DIR}/apt/99pitrisec-aide-refresh" /etc/apt/apt.conf.d/
+chmod +x /usr/local/bin/aide-refresh.sh \
+         /usr/local/bin/lynis-scan.sh \
          /usr/local/bin/rkhunter-scan.sh \
          /usr/local/bin/aide-scan.sh \
          /usr/local/bin/security-weekly-report.sh
@@ -147,7 +162,7 @@ log "Scripts deployed"
 
 # --- Step 7: Deploy systemd units ---
 log "Deploying systemd timers and services..."
-cp "${SYSTEMD_DIR}"/*.service "${SYSTEMD_DIR}"/*.timer /etc/systemd/system/
+cp "${SYSTEMD_DIR}"/*.service "${SYSTEMD_DIR}"/*.timer "${SYSTEMD_DIR}"/*.path /etc/systemd/system/
 systemctl daemon-reload
 
 # Enable and start timers
@@ -155,6 +170,8 @@ systemctl enable --now lynis-scan.timer
 systemctl enable --now rkhunter-scan.timer
 systemctl enable --now aide-scan.timer
 systemctl enable --now security-report.timer
+install -d -m 755 /var/lib/pitrisec && touch /var/lib/pitrisec/dpkg-changed
+systemctl enable --now aide-refresh.path
 log "Timers enabled"
 
 # --- Step 8: Verify ---
@@ -189,6 +206,7 @@ log "    02:00 - Lynis security audit"
 log "    02:30 - rkhunter rootkit scan"
 log "    03:00 - AIDE file integrity check"
 log "    04:00 - Weekly report aggregation"
+log "  After every apt/dpkg run: aide-refresh (log: /var/log/security/aide/refresh.log)"
 log ""
 log "  Reports: /var/log/security/weekly-report.txt"
 log ""

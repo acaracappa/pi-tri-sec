@@ -1,0 +1,2 @@
+// pi-tri-sec: note every dpkg run so aide-refresh.path can re-baseline AIDE once apt is done.
+DPkg::Post-Invoke { "mkdir -p /var/lib/pitrisec && touch /var/lib/pitrisec/dpkg-changed || true"; };

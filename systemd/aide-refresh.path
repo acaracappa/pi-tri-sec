@@ -1,0 +1,8 @@
+[Unit]
+Description=Re-baseline AIDE after package changes
+
+[Path]
+PathChanged=/var/lib/pitrisec/dpkg-changed
+
+[Install]
+WantedBy=paths.target

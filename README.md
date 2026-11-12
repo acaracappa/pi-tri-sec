@@ -47,6 +47,7 @@ Weekly Report Aggregator (/var/log/security/weekly-report.txt)
 | rkhunter-scan.timer | Daily 02:30 | Rootkit scan |
 | aide-scan.timer | Sun 03:00 | Integrity check |
 | security-report.timer | Sun 04:00 | Weekly report |
+| aide-refresh.path | after every apt/dpkg run | Re-baseline AIDE if the updates explain every change |
 
 ## Install
 
@@ -59,7 +60,8 @@ sudo ./setup.sh
 
 `setup.sh` installs the packages, disables the distro timers that clash with these, configures rkhunter (mirror updates,
 known false positives), turns off root SSH login, initialises AIDE (sha512, with excludes for paths that change on every boot),
-copies the scripts to `/usr/local/bin/`, and enables the timers. Re-run `sudo aideinit -y -f` after any intentional system change.
+copies the scripts to `/usr/local/bin/`, and enables the timers and the update hook. Package updates re-baseline AIDE on their own
+(see Maintenance); re-run `sudo aideinit -y -f` after any other intentional system change.
 
 ## Prometheus exporter (optional)
 
@@ -114,8 +116,19 @@ cat /var/log/security/weekly-report.txt
 
 ## Maintenance
 
-### Update AIDE baseline after legitimate changes
-After system updates or intentional config changes, update the AIDE baseline:
+### AIDE baseline after package updates (automatic)
+An apt hook (`/etc/apt/apt.conf.d/99pitrisec-aide-refresh`) touches `/var/lib/pitrisec/dpkg-changed` after every dpkg run, and
+`aide-refresh.path` starts `aide-refresh.sh` once apt has been idle for a minute. It takes the packages installed since the
+baseline from `dpkg.log`, verifies them with `debsums`, and matches every path `aide --check` reports against the files those
+packages own (plus known maintenance churn: apt and dpkg state, caches, compiled Python). If everything is explained it re-runs
+`aideinit`; otherwise it keeps the baseline, logs the unexplained paths to `/var/log/security/aide/refresh.log`, and adds a
+line to `alerts.txt`. Package removals always need a manual review. Check without changing anything:
+```bash
+sudo /usr/local/bin/aide-refresh.sh --dry-run
+```
+
+### Update AIDE baseline after other legitimate changes
+After intentional changes that are not package updates (new scripts, config edits):
 ```bash
 sudo aideinit -y -f
 ```
