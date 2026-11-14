@@ -16,11 +16,12 @@ DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 mkdir -p "$LOG_DIR"
 log() { echo "[$(date -Iseconds)] $*" | tee -a "$LOG"; }
 
-wait_idle() {  # until no apt/dpkg process has run for 60 s
+wait_idle() {  # until no apt/dpkg (or AIDE) process has run for 60 s
     local quiet=0
     while [ $quiet -lt 60 ]; do
         # full command lines: unattended-upgrade-shutdown idles all day under the short name "unattended-upgr"
-        if pgrep -f '(^|/)(apt|apt-get|aptitude|dpkg)( |$)|/unattended-upgrade( |$)' >/dev/null; then quiet=0; else quiet=$((quiet + 10)); fi
+        # AIDE too: a manual aideinit or aide-scan running alongside would race this check
+        if pgrep -f '(^|/)(apt|apt-get|aptitude|dpkg)( |$)|/unattended-upgrade( |$)|(^|/)(aide|aideinit)( |$)' >/dev/null; then quiet=0; else quiet=$((quiet + 10)); fi
         sleep 10
     done
 }
@@ -94,8 +95,8 @@ if [ $DRY = 1 ]; then refresh_once; exit $?; fi
 wait_idle
 started=$(date +%s)
 refresh_once; rc=$?
-# More packages may have been installed while this ran; go round again if so.
-while [ -f "$STAMP" ] && [ "$(stat -c %Y "$STAMP")" -gt "$started" ] && [ $rc -eq 0 ]; do
+# More packages may have been installed while this ran (even if it refused); go round again if so.
+while [ -f "$STAMP" ] && [ "$(stat -c %Y "$STAMP")" -gt "$started" ]; do
     wait_idle; started=$(date +%s); refresh_once; rc=$?
 done
 exit $rc

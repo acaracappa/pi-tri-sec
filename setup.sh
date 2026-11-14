@@ -92,7 +92,7 @@ else
 fi
 sshd -t && systemctl reload ssh
 
-# --- Step 5: Initialize AIDE database ---
+# --- Step 5: Configure AIDE (checksums and excludes) ---
 sed -i -E 's/^Checksums = .*/Checksums = sha512/' /etc/aide/aide.conf
 cat > /etc/aide/aide.conf.d/99_zz_local_excludes << 'EOF'
 !/tmp(/|$)
@@ -136,13 +136,7 @@ cat > /etc/aide/aide.conf.d/99_zz_local_excludes << 'EOF'
 !/var/lib/alsa(/|$)
 !/var/lib/systemd/rfkill(/|$)
 EOF
-if [ ! -f /var/lib/aide/aide.db ]; then
-    log "Initializing AIDE database (this takes a few minutes)..."
-    aideinit
-    log "AIDE database initialized"
-else
-    log "AIDE database already exists, skipping init"
-fi
+# The baseline itself is built after Step 7, once this script's own files are in place.
 
 # --- Step 6: Deploy scripts ---
 log "Deploying scan scripts to /usr/local/bin/..."
@@ -173,6 +167,17 @@ systemctl enable --now security-report.timer
 install -d -m 755 /var/lib/pitrisec && touch /var/lib/pitrisec/dpkg-changed
 systemctl enable --now aide-refresh.path
 log "Timers enabled"
+
+# --- Step 7b: Build the AIDE baseline, now that scripts, units and the apt hook are installed ---
+if [ ! -f /var/lib/aide/aide.db ]; then
+    log "Initializing AIDE database (this takes a few minutes)..."
+    aideinit -y
+    log "AIDE database initialized"
+else
+    log "Rebuilding the AIDE baseline: this run replaced monitored files (scripts, units, configs)..."
+    aideinit -y -f
+    log "AIDE baseline rebuilt"
+fi
 
 # --- Step 8: Verify ---
 log "Verifying deployment..."
