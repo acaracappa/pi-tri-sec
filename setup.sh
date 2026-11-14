@@ -127,6 +127,7 @@ cat > /etc/aide/aide.conf.d/99_zz_local_excludes << 'EOF'
 !/srv/borg/\.cache(/|$)
 !/srv/borg/\.config/borg/security(/|$)
 !/var/lib/pitrisec(/|$)
+!/var/lib/canary-prom(/|$)
 # Rewritten with the same content at every boot (cloud-init, NetworkManager): compare content, not times or inode
 /etc/hosts$ f VarInode
 /etc/netplan/[^/]+\.yaml$ f VarInode
