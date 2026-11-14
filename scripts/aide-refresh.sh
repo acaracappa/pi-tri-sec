@@ -43,6 +43,8 @@ refresh_once() {
     while read -r p; do
         for l in "/var/lib/dpkg/info/${p}.list" "/var/lib/dpkg/info/${p%%:*}.list"; do [ -f "$l" ] && cat "$l" >> "$work/owned" && break; done
     done < "$work/installed"
+    # merged /usr: some packages still list /lib, /bin or /sbin paths, which AIDE sees under /usr
+    sed -nE 's#^/(lib|lib64|bin|sbin)(/|$)#/usr/\1\2#p' "$work/owned" >> "$work/owned"
     sort -u -o "$work/owned" "$work/owned"
 
     # debsums: the installed files must match the packages (conffiles excluded; local edits there are expected).
